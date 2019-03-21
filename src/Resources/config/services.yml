@@ -1,0 +1,12 @@
+services:
+  Kml\DoctrineTruncateBundle\Service\Truncate:
+    class: Kml\DoctrineTruncateBundle\Service\Truncate
+    arguments:
+      - "@doctrine.orm.entity_manager"
+      - "%kml_doctrine_truncate%"
+  Kml\DoctrineTruncateBundle\Command\TruncateTableCommand:
+    class: Kml\DoctrineTruncateBundle\Command\TruncateTableCommand
+    arguments:
+      - "@Kml\\DoctrineTruncateBundle\\Service\\Truncate"
+    tags:
+      - { name: console.command }
