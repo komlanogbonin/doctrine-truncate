@@ -31,7 +31,7 @@
   },
   "autoload": {
     "psr-4": {
-      "Kml\\DoctrineTruncateBundle\\": "src/"
+      "Kml\\DoctrineTruncateBundle\\": "/"
     },
     "exclude-from-classmap": [
       "/tests/"
