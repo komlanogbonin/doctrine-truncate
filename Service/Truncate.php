@@ -1,25 +1,28 @@
 <?php
 
-namespace Kml\DoctrineTruncateBundle\Service;//                    ->defaultValue(["App\\Entity"])
+namespace Kml\DoctrineTruncateBundle\Service;
 
 
-use Doctrine\ORM\EntityManager;
-use HaydenPierce\ClassFinder\ClassFinder;
+use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\DBALException;
+use Doctrine\DBAL\Driver\Exception;
+use Doctrine\ORM\EntityManagerInterface;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Input\InputArgument;
+use Symfony\Component\Console\Input\InputInterface;
+use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Finder\Finder;
 
 /**
- * Class Truncate
- *
- * Clear doctrine (mysql) database table
+ * Class Truncate generate slug from text string
  *
  * @package Kml\DoctrineTruncateBundle\Service
  */
 class Truncate
 {
     /**
-     * Truncate configuration
-     * @see kml_doctrine_truncate key in .yaml configs
-     *
      * @var array
      */
     private $config;
@@ -46,11 +49,10 @@ class Truncate
      */
     private $entitiesCount;
 
-    //TODO: for future optimisation, execute all queries in one execution.
-//    /**
-//     * @var array
-//     */
-//    private $queries;
+    /**
+     * @var array
+     */
+    private $queries;
 
     /**
      * ignore foreign key constraint
@@ -69,14 +71,15 @@ class Truncate
      * @param EntityManager $entityManager
      * @param array $config
      */
-    public function __construct(EntityManager $entityManager, array $config)
+    public function __construct(EntityManagerInterface $entityManager, array $config)
     {
         $this->config = $config;
         $this->optionAll = false;
         $this->entityManager = $entityManager;
         $this->connection = $entityManager->getConnection();
-//        $this->queries = [];
+        $this->queries = [];
         $this->optionIgnoreFk = false;
+
     }
 
     /**
@@ -92,7 +95,7 @@ class Truncate
     /**
      * @return array
      */
-    public function getConfig(): array
+    public function getConfig()
     {
         return $this->config;
     }
@@ -101,7 +104,7 @@ class Truncate
      * @param array $config
      * @return Truncate
      */
-    public function setConfig($config): self
+    public function setConfig($config)
     {
         $this->config = $config;
         return $this;
@@ -111,21 +114,20 @@ class Truncate
      * @param bool $optionAll
      * @return Truncate
      */
-    public function setOptionAll($optionAll): self
+    public function setOptionAll($optionAll)
     {
         $this->optionAll = $optionAll;
         return $this;
     }
 
     /**
-     * Add additional entity namespace to the $config
+     * Add additional entity path to the $config
      *
-     * @param $entityNamespace
+     * @param $entityPath
      */
-    public function addEntityNamespace($entityNamespace): self
+    public function addEntityNamespace($entityNamespace): void
     {
         $this->config['entityNamespaces'][] = $entityNamespace;
-        return $this;
     }
 
     /**
@@ -142,8 +144,24 @@ class Truncate
     }
 
     /**
-     * Truncate a single entity
-     *
+     * @return int
+     */
+    public function getEntitiesCount()
+    {
+        return $this->entitiesCount;
+    }
+
+    /**
+     * @param int $entitiesCount
+     * @return Truncate
+     */
+    public function setEntitiesCount($entitiesCount)
+    {
+        $this->entitiesCount = $entitiesCount;
+        return $this;
+    }
+
+    /**
      * @param string|null $entity
      * @throws \Doctrine\DBAL\DBALException
      */
@@ -153,14 +171,14 @@ class Truncate
         if ($this->optionIgnoreFk) {
             $this->connection->prepare(sprintf($foreignKeyString, 0))->execute();
         }
-
+//        dd($entity);
         if ($this->optionAll || null === $entity) {
             $this->truncateAll();
         } else {
             if (null !== $entity) {
                 $this->truncateTable($entity);
             } else {
-                throw new \InvalidArgumentException('You must provide entity full namespace or use --all option');
+                throw new \Exception('You must provide entity full namespace or set optionAll to true');
             }
         }
 
@@ -171,15 +189,13 @@ class Truncate
 
     /**
      * Truncate all tables in database
-     *
-     * @throws \Exception
      */
     public function truncateAll()
     {
         $classes = $this->getClasses();
 
         foreach ($classes as $class) {
-            //process truncate if class not match ignore pattern defined in configs
+            /*Ignore Interface*/
             if (!$this->inIgnore($class)) {
                 $this->truncateTable($class);
             }
@@ -195,7 +211,7 @@ class Truncate
     public function getClasses(): array
     {
         $files = [];
-
+        
         foreach ($this->config['entityNamespaces'] as $entityNamespace) {
             $mergedArray = array_merge(
                 $files,
@@ -204,85 +220,42 @@ class Truncate
             $files = $mergedArray;
         }
         $this->entitiesCount = count($files);
-
+        
         return $files;
     }
 
     /**
-     * Check if a class is ignored. Return true if class
-     *
      * @param $entity
      * @return bool|int
      */
     private function inIgnore($entity)
     {
-        return (
-            ($this->config['ignore']['regex'] !== null && preg_match($this->config['ignore']['regex'], $entity))
-            || in_array($entity, $this->config['ignore']['classes'], true)
-        );
+        return (bool)strpos($entity, 'Interface');
     }
 
     /**
-     * Truncate table
-     *
      * @param string $entity entity short class Name
      */
     protected function truncateTable($entity)
     {
-        $entityFullNamespace = $this->getFullNamespace($entity);
-
-        if (!$entityFullNamespace) {
-            return;
-        }
-
-        try {
-            $table = $this->entityManager->getClassMetadata(sprintf('%s', $entityFullNamespace))->getTableName();
+//        try {
+            $table = $this->entityManager->getClassMetadata(sprintf('%s', $entity))->getTableName();
             $this->writeln(sprintf('Truncating: %s', $table));
-            $this->connection->prepare(sprintf('TRUNCATE TABLE %s; ALTER TABLE %s AUTO_INCREMENT = 0;', $table, $table))
-                ->execute()
+            $command = sprintf('TRUNCATE TABLE %s; ALTER TABLE %s AUTO_INCREMENT = 0;', $table, $table);
+            if($this->optionIgnoreFk) {
+                $command = sprintf('SET FOREIGN_KEY_CHECKS = 0;
+                TRUNCATE TABLE %s; ALTER TABLE %s AUTO_INCREMENT = 0;
+                SET FOREIGN_KEY_CHECKS = 1;',
+                    $table, $table);
+            }
+            $this->connection->prepare($command)->execute()
             ;
-        } catch (\Exception $e) {
-            $this->writeln(sprintf("Ignoring %s", $entity));
-        };
+//        } catch (\Exception $e) {
+//            $this->writeln(sprintf("Ignoring %s", $entity));
+//        };
     }
 
-    /**
-     * Get entity full namespace.
-     * If you specify class name without it namespace, this function will add class namespace.
-     * In case of the class name is defined in many namespace, just the first will be used.
-     *
-     * @example getFullNamespace('Product') return 'App\Entity\Product'
-     *
-     * @param $entity
-     * @return string
-     */
-    private function getFullNamespace($entity): ?string
-    {
-        if ($this->inIgnore($entity)) {
-            $this->consoleInputOutput->writeln(sprintf('Ignore: %s is excluded', $entity));
-            return null;
-        }
-
-        if (class_exists($entity)) {
-            return $entity;
-        }
-
-        $full = null;
-        $namespace = '';
-        $i = count($this->config['entityNamespaces']);
-        while (!class_exists($full = $namespace . '\\' . $entity) && $i > 0) {
-            $namespace = $this->config['entityNamespaces'][$i - 1];
-            $i--;
-        }
-        return class_exists($full) ?: null;
-    }
-
-    /**
-     * Write console output message
-     *
-     * @param $str
-     */
-    private function writeln($str): void
+    private function writeln($str)
     {
         if ($this->consoleInputOutput) {
             $this->consoleInputOutput->writeln($str);

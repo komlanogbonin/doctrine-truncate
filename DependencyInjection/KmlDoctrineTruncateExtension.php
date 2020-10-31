@@ -4,6 +4,7 @@ namespace Kml\DoctrineTruncateBundle\DependencyInjection;
 
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader;
 use Symfony\Component\HttpKernel\DependencyInjection\Extension;
 
@@ -12,9 +13,36 @@ use Symfony\Component\HttpKernel\DependencyInjection\Extension;
  *
  * @link http://symfony.com/doc/current/cookbook/bundles/extension.html
  */
-class KmlDoctrineTruncateExtension extends Extension
+final class KmlDoctrineTruncateExtension extends Extension implements PrependExtensionInterface
 {
     /**
+     * Prepend configuration
+     * @param ContainerBuilder $container
+     */
+    public function prepend(ContainerBuilder $container): void
+    {
+        $config = array(
+            'exclude' => array(),
+        );
+
+        foreach ($container->getExtensions() as $name => $extension) {
+            switch ($name) {
+                case 'kml_doctrine_truncate':
+                    $container->prependExtensionConfig($name, $config);
+                    break;
+            }
+        }
+
+        $configs = $container->getExtensionConfig($this->getAlias());
+        $config = $this->processConfiguration(new Configuration(), $configs);
+        if (isset($config['exclude'])) {
+            $config = array('exclude' => $config['exclude']);
+            $container->prependExtensionConfig('kml_doctrine_truncate', $config);
+        }
+    }
+
+    /**
+     *
      * @param array $configs
      * @param ContainerBuilder $container
      * @throws \Exception

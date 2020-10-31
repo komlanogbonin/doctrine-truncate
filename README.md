@@ -65,9 +65,6 @@ For `Symfony 4` verify that you have this line in your `config/bundles.php`
 ```
 
 #Usage
+Truncate all database tables
 
-Truncate all database tables:
 `php bin/console doctrine:truncate --all`
-
-Truncate Product table:
-`php bin/console doctrine:truncate  App\\Entity\\Product`

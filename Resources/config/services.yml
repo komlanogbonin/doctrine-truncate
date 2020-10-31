@@ -1,4 +1,13 @@
 services:
+  _defaults:
+    public: true
+    autowire: true      # Automatically injects dependencies in your services.
+    autoconfigure: true # Automatically registers your services as commands, event subscribers, etc.
+#
+  Kml\DoctrineTruncateBundle\:
+    resource: '%kernel.root_dir%/'
+    exclude: '%kernel.root_dir%/{Controller,DependencyInjection,Entity,Migrations,tests,Kernel.php}'
+
   Kml\DoctrineTruncateBundle\Service\Truncate:
     class: Kml\DoctrineTruncateBundle\Service\Truncate
     arguments:
@@ -6,7 +15,5 @@ services:
       - "%kml_doctrine_truncate%"
   Kml\DoctrineTruncateBundle\Command\TruncateTableCommand:
     class: Kml\DoctrineTruncateBundle\Command\TruncateTableCommand
-    arguments:
-      - "@Kml\\DoctrineTruncateBundle\\Service\\Truncate"
     tags:
       - { name: console.command }

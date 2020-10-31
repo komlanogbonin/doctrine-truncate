@@ -1,3 +1,9 @@
 .idea
 vendor
 reciepe
+phpunit.xml
+.directory
+.project
+.buildpath
+.settings
+composer.lock
